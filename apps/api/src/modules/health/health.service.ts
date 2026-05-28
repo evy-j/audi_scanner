@@ -5,8 +5,6 @@ import { versionMetadata } from "../../common/version/version-metadata.js";
 
 type CheckStatus = "ok" | "failed" | "not_configured" | "degraded" | "disabled";
 
-type RedisProbeFailure = Extract<RedisProbeResult, { ok: false }>;
-
 type ReadyInput = {
   checks: {
     database: CheckStatus;
@@ -14,6 +12,15 @@ type ReadyInput = {
     redis: CheckStatus;
     workerQueue: CheckStatus;
   };
+};
+
+type NormalizedRedisProbe = {
+  ok: boolean;
+  mode: "redis" | "memory" | "disabled";
+  target?: string | undefined;
+  latencyMs?: number | undefined;
+  reason?: string | undefined;
+  code?: string | undefined;
 };
 
 export class HealthService {
@@ -36,25 +43,20 @@ export class HealthService {
     ]);
 
     const databaseStatus: CheckStatus = database.status === "fulfilled" ? "ok" : "failed";
-    const redisResult: RedisProbeResult = redisProbe.status === "fulfilled"
-      ? redisProbe.value
-      : {
-          ok: false as const,
-          mode: "redis" as const,
-          reason: redisProbe.reason instanceof Error ? redisProbe.reason.message : "Redis probe failed"
-        };
-    const redisStatus: CheckStatus = redisResult.ok
-      ? redisResult.mode === "redis" ? "ok" : redisResult.mode === "disabled" ? "disabled" : "degraded"
+    const redisInfo = normalizeRedisProbe(redisProbe);
+    const redisStatus: CheckStatus = redisInfo.ok
+      ? redisInfo.mode === "redis" ? "ok" : redisInfo.mode === "disabled" ? "disabled" : "degraded"
       : "failed";
     const workerQueueStatus: CheckStatus = workerQueueStatusFromRedis(redisStatus);
-    const diagnostics = env.READINESS_DIAGNOSTICS || redisStatus === "failed"
+    const storage = storageStatus();
+    const diagnostics = env.READINESS_DIAGNOSTICS || redisStatus === "failed" || databaseStatus === "failed"
       ? {
           database: database.status === "rejected" ? safeErrorSummary(database.reason) : undefined,
-          redis: redisFailureDiagnostics(redisResult)
+          redis: redisInfo.ok ? undefined : redisFailureDiagnostics(redisInfo)
         }
       : undefined;
 
-    const serviceOk = databaseStatus === "ok" && storageStatus() !== "failed";
+    const serviceOk = databaseStatus === "ok" && storage !== "failed";
 
     return {
       status: serviceOk && redisStatus === "ok" ? "ok" : serviceOk ? "degraded" : "failed",
@@ -64,14 +66,14 @@ export class HealthService {
         database: databaseStatus,
         redis: redisStatus,
         workerQueue: workerQueueStatus,
-        storage: storageStatus(),
+        storage,
         ai: isAiConfigured() ? "ok" : "not_configured"
       },
       queue: {
         backend: queueBackendMode(),
         readinessStrict: isQueueStrict(),
-        redisTarget: redisResult.target,
-        redisLatencyMs: redisResult.ok ? redisResult.latencyMs : undefined,
+        redisTarget: redisInfo.target,
+        redisLatencyMs: redisInfo.ok ? redisInfo.latencyMs : undefined,
         note: queueReadinessNote(redisStatus, workerQueueStatus)
       },
       ...(diagnostics ? { diagnostics } : {}),
@@ -111,6 +113,26 @@ export function isReadyForHttp(result: { status: string }): boolean {
   return result.status === "ready" || result.status === "ready_degraded";
 }
 
+function normalizeRedisProbe(result: PromiseSettledResult<RedisProbeResult>): NormalizedRedisProbe {
+  if (result.status === "rejected") {
+    return {
+      ok: false,
+      mode: "redis",
+      reason: result.reason instanceof Error ? result.reason.message : "Redis probe failed"
+    };
+  }
+
+  const value = result.value as NormalizedRedisProbe;
+  return {
+    ok: Boolean(value.ok),
+    mode: value.mode,
+    target: value.target,
+    latencyMs: value.latencyMs,
+    reason: value.reason,
+    code: value.code
+  };
+}
+
 function isReady(deep: ReadyInput): boolean {
   if (deep.checks.database !== "ok") return false;
   if (deep.checks.storage === "failed") return false;
@@ -147,15 +169,14 @@ function queueReadinessNote(redisStatus: CheckStatus, workerQueueStatus: CheckSt
   return "API is ready in degraded mode. Queue/worker is not marked ok until Redis is reachable; this is real-only and not a fake queue success.";
 }
 
-function redisFailureDiagnostics(redisResult: RedisProbeResult) {
-  if (redisResult.ok) return undefined;
-  const failed = redisResult as RedisProbeFailure;
+function redisFailureDiagnostics(redisInfo: NormalizedRedisProbe) {
+  const reason = redisInfo.reason || "Redis readiness check failed";
   return {
-    code: failed.code,
-    message: redactConfigValue(failed.reason),
-    target: failed.target,
-    mode: failed.mode,
-    hint: redisFailureHint(failed.reason)
+    code: redisInfo.code,
+    message: redactConfigValue(reason),
+    target: redisInfo.target,
+    mode: redisInfo.mode,
+    hint: redisFailureHint(reason)
   };
 }
 
