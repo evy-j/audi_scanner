@@ -1,0 +1,185 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_load:
+        description: "Run load smoke tests"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  DATABASE_URL: postgresql://audit_scanner:audit_scanner@localhost:5432/audit_scanner_test?schema=public
+  DIRECT_DATABASE_URL: postgresql://audit_scanner:audit_scanner@localhost:5432/audit_scanner_test?schema=public
+  REDIS_URL: redis://localhost:6379/15
+  REDIS_KEY_PREFIX: audit-scanner:ci
+  JWT_ACCESS_SECRET: test-access-secret-change-me-32chars
+  JWT_REFRESH_SECRET: test-refresh-secret-change-me-32chars
+  API_KEY_HASH_SECRET: test-api-key-secret-change-me-32chars
+
+jobs:
+  unit-api-worker-prisma:
+    name: Unit, API, Worker, Prisma
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: audit_scanner_test
+          POSTGRES_USER: audit_scanner
+          POSTGRES_PASSWORD: audit_scanner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U audit_scanner -d audit_scanner_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Remove this bootstrap after the test dependencies are committed to package.json and package-lock.json.
+      - name: Install test toolchain
+        run: npm install --no-save vitest @vitest/coverage-v8 supertest @types/supertest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
+
+      - run: npm run db:generate
+      - run: npm run db:deploy
+      - run: npm run test:unit
+      - run: npm run test:api
+      - run: npm run test:worker
+      - run: npm run test:prisma
+      - run: npm run test:integration
+      - run: npm run test:coverage
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vitest-coverage
+          path: coverage/vitest
+          if-no-files-found: ignore
+
+  frontend-e2e:
+    name: Frontend and Playwright
+    runs-on: ubuntu-latest
+    needs: unit-api-worker-prisma
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - name: Install browser test toolchain
+        run: npm install --no-save vitest @vitest/coverage-v8 @playwright/test jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event axe-core @axe-core/playwright
+      - run: npx playwright install --with-deps
+
+      - run: npm run test:frontend
+      - run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          PLAYWRIGHT_API_URL: http://127.0.0.1:4000/api/v1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results/playwright
+          if-no-files-found: ignore
+
+  scanner-security:
+    name: Scanner and Security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm install --no-save vitest @vitest/coverage-v8 @testing-library/jest-dom
+      - run: npm run test:scanner
+      - run: npm run test:security
+      - run: npm audit --audit-level=high
+
+      - name: Build scanner images
+        run: npm run docker:scanners:build
+
+      - name: Smoke scanner images
+        run: npm run docker:scanners:smoke
+
+  load-smoke:
+    name: Load Smoke
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.run_load == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start local stack
+        run: npm run dev:local:detached
+
+      - name: Run dependency-light load smoke
+        run: npm run test:load
+        env:
+          LOAD_TEST_TARGET: http://localhost:4000
+          LOAD_TEST_PATH: /health
+          LOAD_TEST_VUS: "10"
+          LOAD_TEST_DURATION_SECONDS: "30"
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 smoke
+        run: k6 run tests/load/api-scan-submit.k6.js
+        env:
+          LOAD_TEST_API_URL: http://localhost:4000/api/v1
+          LOAD_TEST_VUS: "10"
+          LOAD_TEST_DURATION_SECONDS: "30"
+
+      - name: Stop local stack
+        if: always()
+        run: npm run dev:local:down

@@ -1,0 +1,40 @@
+name: Web3Guard
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  web3guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Web3Guard CLI
+        env:
+          # Required GitHub repository secrets.
+          WEB3GUARD_API_URL: ${{ secrets.WEB3GUARD_API_URL }}
+          WEB3GUARD_API_KEY: ${{ secrets.WEB3GUARD_API_KEY }}
+          WEB3GUARD_ORG_ID: ${{ secrets.WEB3GUARD_ORG_ID }}
+          WEB3GUARD_PROJECT_ID: ${{ secrets.WEB3GUARD_PROJECT_ID }}
+        run: |
+          npx @web3guard/cli ci \
+            --path . \
+            --repo "${{ github.repository }}" \
+            --branch "${{ github.ref_name }}" \
+            --commit-sha "${{ github.sha }}" \
+            --json-out web3guard-report.json \
+            --sarif-out web3guard.sarif
+
+      - name: Upload Web3Guard SARIF
+        if: ${{ hashFiles('web3guard.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: web3guard.sarif

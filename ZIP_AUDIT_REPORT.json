@@ -1,0 +1,28 @@
+{
+  "status": "FIXED_RELEASE_CANDIDATE",
+  "zipIntegrity": "PASS",
+  "finalQaScript": "PASS",
+  "missingLocalImportsAfterFix": 0,
+  "fixed": [
+    {
+      "file": "apps/worker/src/services/build/local-build-execution.service.ts",
+      "issue": "Missing worker build service import",
+      "resolution": "Added safe NOT_ASSESSED build-profile detector service"
+    },
+    {
+      "file": "apps/api/src/modules/security-os/security-os.routes.ts",
+      "issue": "read/write middleware used before declaration",
+      "resolution": "Moved read/write constants above first use"
+    }
+  ],
+  "notVerified": [
+    "npm install",
+    "npm run db:generate",
+    "npm run db:deploy",
+    "npm run billing:seed",
+    "npm run chain:seed",
+    "npm run typecheck",
+    "npm test",
+    "npm run build"
+  ]
+}

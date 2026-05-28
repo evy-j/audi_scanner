@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-05-28T03:25:25.221Z",
+  "missingRequiredFiles": [],
+  "suspiciousSecretFiles": [],
+  "allowedFixtureSecretMatches": [
+    ".env.example",
+    ".env.local.example",
+    ".env.test.example",
+    ".github/workflows/enterprise-ci.yml",
+    ".github/workflows/test.yml",
+    "apps/api/.env.example",
+    "apps/worker/.env.example",
+    "docker-compose.local.yml",
+    "docs/local-development.md",
+    "docs/testing-architecture.md",
+    "scripts/final-qa-check.mjs",
+    "tests/setup/vitest.setup.ts",
+    "tests/unit/api/enterprise-security.unit.test.ts",
+    "tests/unit/api/github-integration.unit.test.ts",
+    "tests/unit/api/launch-hardening.unit.test.ts",
+    "tests/unit/api/source-ingestion-policy.unit.test.ts"
+  ],
+  "status": "PASS"
+}

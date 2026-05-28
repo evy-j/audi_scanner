@@ -1,0 +1,33 @@
+{
+  "name": "@audit-scanner/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:sandbox": "tsc -p tsconfig.sandbox.json"
+  },
+  "dependencies": {
+    "@audit-scanner/database": "file:../../packages/database",
+    "@audit-scanner/analysis-ir": "file:../../packages/analysis-ir",
+    "@audit-scanner/scanner-core": "file:../../packages/scanner-core",
+    "@audit-scanner/shared": "file:../../packages/shared",
+    "bullmq": "^5.76.6",
+    "ioredis": "^5.5.0",
+    "pino": "^9.6.0",
+    "zod": "^3.24.2",
+    "@types/node": "^20.17.24",
+    "typescript": "^5.8.2",
+    "tsx": "^4.19.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.24",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

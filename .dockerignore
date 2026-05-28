@@ -1,0 +1,13 @@
+.git
+.env
+.env.local
+.env.*.local
+node_modules
+apps/*/.next
+apps/*/dist
+packages/*/dist
+coverage
+.artifacts
+.scanner-tmp
+*.log
+npm-debug.log*

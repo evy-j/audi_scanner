@@ -1,0 +1,16 @@
+services:
+  api:
+    command: ["node", "--inspect=0.0.0.0:9229", "--import", "tsx", "apps/api/src/main.ts"]
+    ports:
+      - "127.0.0.1:${API_DEBUG_PORT:-9229}:9229"
+
+  worker:
+    command: ["node", "--inspect=0.0.0.0:9230", "--import", "tsx", "apps/worker/src/main.ts"]
+    ports:
+      - "127.0.0.1:${WORKER_DEBUG_PORT:-9230}:9230"
+
+  web:
+    environment:
+      NODE_OPTIONS: --inspect=0.0.0.0:9231
+    ports:
+      - "127.0.0.1:${WEB_DEBUG_PORT:-9231}:9231"

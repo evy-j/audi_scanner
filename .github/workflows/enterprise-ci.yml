@@ -1,0 +1,167 @@
+name: Enterprise CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: enterprise-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  NODE_VERSION: "20"
+  DATABASE_URL: postgresql://audit_scanner:audit_scanner@localhost:5432/audit_scanner_test?schema=public
+  DIRECT_DATABASE_URL: postgresql://audit_scanner:audit_scanner@localhost:5432/audit_scanner_test?schema=public
+  REDIS_URL: redis://localhost:6379/15
+  REDIS_KEY_PREFIX: audit-scanner:ci
+  JWT_ACCESS_SECRET: test-access-secret-change-me-32chars
+  JWT_REFRESH_SECRET: test-refresh-secret-change-me-32chars
+  API_KEY_HASH_SECRET: test-api-key-secret-change-me-32chars
+
+jobs:
+  static-analysis:
+    name: Lint, Typecheck, Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+
+  prisma-migrations:
+    name: Prisma Migration Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: audit_scanner_test
+          POSTGRES_USER: audit_scanner
+          POSTGRES_PASSWORD: audit_scanner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U audit_scanner -d audit_scanner_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx prisma validate --schema packages/database/prisma/schema.prisma
+      - run: npm run db:deploy
+      - run: npx prisma migrate status --schema packages/database/prisma/schema.prisma
+
+  tests:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: audit_scanner_test
+          POSTGRES_USER: audit_scanner
+          POSTGRES_PASSWORD: audit_scanner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U audit_scanner -d audit_scanner_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Remove after these tools are committed to package.json/package-lock.json.
+      - name: Install CI test toolchain
+        run: npm install --no-save vitest @vitest/coverage-v8 supertest @types/supertest jsdom @testing-library/react @testing-library/jest-dom @testing-library/user-event
+
+      - run: npm run db:generate
+      - run: npm run db:deploy
+      - run: npm run test:unit
+      - run: npm run test:api
+      - run: npm run test:worker
+      - run: npm run test:scanner
+      - run: npm run test:prisma
+      - run: npm run test:integration
+      - run: npm run test:frontend
+      - run: npm run test:security
+      - run: npm audit --audit-level=high
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: enterprise-ci-coverage
+          path: coverage
+          if-no-files-found: ignore
+
+  docker-build-smoke:
+    name: Docker Build Smoke
+    runs-on: ubuntu-latest
+    needs:
+      - static-analysis
+      - prisma-migrations
+      - tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api/Dockerfile
+          push: false
+          tags: audit-scanner-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/worker/Dockerfile
+          push: false
+          tags: audit-scanner-worker:ci
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+

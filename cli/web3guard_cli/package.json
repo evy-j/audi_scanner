@@ -1,0 +1,8 @@
+{
+  "name": "@web3guard/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "web3guard": "./main.mjs"
+  }
+}

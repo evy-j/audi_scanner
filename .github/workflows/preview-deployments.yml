@@ -1,0 +1,105 @@
+name: Preview Deployments
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  vercel-preview:
+    name: Vercel Preview
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    environment: preview
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx vercel pull --yes --environment=preview --token "${VERCEL_TOKEN}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - run: npx vercel build --token "${VERCEL_TOKEN}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy preview
+        id: deploy
+        run: |
+          url="$(npx vercel deploy --prebuilt --token "${VERCEL_TOKEN}")"
+          echo "url=${url}" >> "${GITHUB_OUTPUT}"
+          echo "### Vercel preview" >> "${GITHUB_STEP_SUMMARY}"
+          echo "${url}" >> "${GITHUB_STEP_SUMMARY}"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  render-preview:
+    name: Render Preview Hook
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    environment: preview
+    steps:
+      - name: Trigger Render preview deploy
+        run: |
+          if [ -z "${RENDER_PREVIEW_DEPLOY_HOOK_URL}" ]; then
+            echo "RENDER_PREVIEW_DEPLOY_HOOK_URL is not configured; skipping Render preview."
+            exit 0
+          fi
+          curl -fsS -X POST "${RENDER_PREVIEW_DEPLOY_HOOK_URL}"
+        env:
+          RENDER_PREVIEW_DEPLOY_HOOK_URL: ${{ secrets.RENDER_PREVIEW_DEPLOY_HOOK_URL }}
+
+  preview-migrations:
+    name: Preview Prisma Migrations
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    environment: preview
+    env:
+      DATABASE_URL: ${{ secrets.PREVIEW_DATABASE_URL }}
+      DIRECT_DATABASE_URL: ${{ secrets.PREVIEW_DIRECT_DATABASE_URL || secrets.PREVIEW_DATABASE_URL }}
+    steps:
+      - name: Check preview database configuration
+        id: config
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "PREVIEW_DATABASE_URL is not configured; skipping preview migrations."
+          else
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.config.outputs.enabled == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.config.outputs.enabled == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+        if: steps.config.outputs.enabled == 'true'
+      - run: npm run db:generate
+        if: steps.config.outputs.enabled == 'true'
+      - run: npm run db:deploy
+        if: steps.config.outputs.enabled == 'true'

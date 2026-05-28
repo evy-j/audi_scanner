@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true,
+    "tsBuildInfoFile": "dist/.sandbox.tsbuildinfo"
+  },
+  "include": [
+    "src/config/environment.ts",
+    "src/common/errors.ts",
+    "src/common/logger.ts",
+    "src/services/scan-services.ts",
+    "src/services/scan-execution/**/*.ts",
+    "../../packages/shared/src/**/*.ts"
+  ]
+}
+

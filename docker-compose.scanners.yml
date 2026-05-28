@@ -1,0 +1,125 @@
+name: audit-scanner-sandbox
+
+x-scanner-hardening: &scanner-hardening
+  network_mode: "none"
+  ipc: "none"
+  init: true
+  privileged: false
+  read_only: true
+  user: "10001:10001"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+    - seccomp=./docker/security/seccomp-scanner.json
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,noexec,size=256m
+    - /output:rw,nosuid,nodev,noexec,size=64m
+  ulimits:
+    nofile:
+      soft: 1024
+      hard: 1024
+    nproc: 256
+  pids_limit: 256
+  restart: "no"
+  environment:
+    SCANNER_UMASK: "0022"
+
+services:
+  scanner-base:
+    image: audit-scanner/scanner-base:${SCANNER_IMAGE_TAG:-latest}
+    profiles:
+      - scanner-images
+      - scanner-smoke
+    build:
+      context: .
+      dockerfile: docker/scanners/base/Dockerfile
+      args:
+        SCANNER_UID: ${SCANNER_UID:-10001}
+        SCANNER_GID: ${SCANNER_GID:-10001}
+    <<: *scanner-hardening
+    mem_limit: 512m
+    cpus: 1
+    command: ["python", "--version"]
+
+  scanner-slither:
+    image: audit-scanner/scanner-slither:${SCANNER_IMAGE_TAG:-latest}
+    profiles:
+      - scanner-images
+      - scanner-smoke
+    build:
+      context: .
+      dockerfile: docker/scanners/slither/Dockerfile
+      args:
+        SCANNER_IMAGE_TAG: ${SCANNER_IMAGE_TAG:-latest}
+        SLITHER_ANALYZER_VERSION: ${SLITHER_ANALYZER_VERSION:-}
+        SOLC_SELECT_VERSION: ${SOLC_SELECT_VERSION:-}
+        SOLC_VERSIONS: ${SOLC_VERSIONS:-0.8.26 0.8.25 0.8.24 0.8.23 0.8.20 0.7.6 0.6.12 0.5.17 0.4.26}
+        DEFAULT_SOLC_VERSION: ${DEFAULT_SOLC_VERSION:-0.8.24}
+    depends_on:
+      scanner-base:
+        condition: service_completed_successfully
+    <<: *scanner-hardening
+    mem_limit: 4g
+    cpus: 2
+    command: ["slither", "--version"]
+
+  scanner-mythril:
+    image: audit-scanner/scanner-mythril:${SCANNER_IMAGE_TAG:-latest}
+    profiles:
+      - scanner-images
+      - scanner-smoke
+    build:
+      context: .
+      dockerfile: docker/scanners/mythril/Dockerfile
+      args:
+        SCANNER_IMAGE_TAG: ${SCANNER_IMAGE_TAG:-latest}
+        MYTHRIL_VERSION: ${MYTHRIL_VERSION:-}
+        SOLC_SELECT_VERSION: ${SOLC_SELECT_VERSION:-}
+        SOLC_VERSIONS: ${SOLC_VERSIONS:-0.8.26 0.8.25 0.8.24 0.8.23 0.8.20 0.7.6 0.6.12 0.5.17 0.4.26}
+        DEFAULT_SOLC_VERSION: ${DEFAULT_SOLC_VERSION:-0.8.24}
+    depends_on:
+      scanner-base:
+        condition: service_completed_successfully
+    <<: *scanner-hardening
+    mem_limit: 8g
+    cpus: 2
+    command: ["myth", "version"]
+
+  scanner-semgrep:
+    image: audit-scanner/scanner-semgrep:${SCANNER_IMAGE_TAG:-latest}
+    profiles:
+      - scanner-images
+      - scanner-smoke
+    build:
+      context: .
+      dockerfile: docker/scanners/semgrep/Dockerfile
+      args:
+        SCANNER_IMAGE_TAG: ${SCANNER_IMAGE_TAG:-latest}
+        SEMGREP_VERSION: ${SEMGREP_VERSION:-}
+    depends_on:
+      scanner-base:
+        condition: service_completed_successfully
+    <<: *scanner-hardening
+    mem_limit: 4g
+    cpus: 2
+    command: ["semgrep", "--version"]
+
+  scanner-foundry:
+    image: audit-scanner/scanner-foundry:${SCANNER_IMAGE_TAG:-latest}
+    profiles:
+      - scanner-images
+      - scanner-smoke
+    build:
+      context: .
+      dockerfile: docker/scanners/foundry/Dockerfile
+      args:
+        SCANNER_IMAGE_TAG: ${SCANNER_IMAGE_TAG:-latest}
+        FOUNDRY_IMAGE_TAG: ${FOUNDRY_IMAGE_TAG:-latest}
+    depends_on:
+      scanner-base:
+        condition: service_completed_successfully
+    <<: *scanner-hardening
+    mem_limit: 4g
+    cpus: 2
+    command: ["forge", "--version"]
