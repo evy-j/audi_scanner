@@ -5,6 +5,8 @@ import { versionMetadata } from "../../common/version/version-metadata.js";
 
 type CheckStatus = "ok" | "failed" | "not_configured" | "degraded" | "disabled";
 
+type RedisProbeFailure = Extract<RedisProbeResult, { ok: false }>;
+
 type ReadyInput = {
   checks: {
     database: CheckStatus;
@@ -48,13 +50,7 @@ export class HealthService {
     const diagnostics = env.READINESS_DIAGNOSTICS || redisStatus === "failed"
       ? {
           database: database.status === "rejected" ? safeErrorSummary(database.reason) : undefined,
-          redis: redisResult.ok ? undefined : {
-            code: redisResult.code,
-            message: redactConfigValue(redisResult.reason),
-            target: redisResult.target,
-            mode: redisResult.mode,
-            hint: redisFailureHint(redisResult.reason)
-          }
+          redis: redisFailureDiagnostics(redisResult)
         }
       : undefined;
 
@@ -149,6 +145,18 @@ function queueReadinessNote(redisStatus: CheckStatus, workerQueueStatus: CheckSt
     return "Queue strict mode is enabled, so Redis/workerQueue must be ok before this service is ready.";
   }
   return "API is ready in degraded mode. Queue/worker is not marked ok until Redis is reachable; this is real-only and not a fake queue success.";
+}
+
+function redisFailureDiagnostics(redisResult: RedisProbeResult) {
+  if (redisResult.ok) return undefined;
+  const failed = redisResult as RedisProbeFailure;
+  return {
+    code: failed.code,
+    message: redactConfigValue(failed.reason),
+    target: failed.target,
+    mode: failed.mode,
+    hint: redisFailureHint(failed.reason)
+  };
 }
 
 function redisFailureHint(reason: string): string {
