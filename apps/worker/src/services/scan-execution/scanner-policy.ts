@@ -41,7 +41,7 @@ function getImageForAnalyzer(analyzer: AnalyzerName): string {
     case "aderyn":
       return env.ADERYN_SCANNER_IMAGE;
     case "foundry":
-      return dataImageUnsupported(analyzer);
+      return env.FOUNDRY_SCANNER_IMAGE;
   }
 }
 

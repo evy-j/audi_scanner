@@ -15,7 +15,7 @@ export class ScannerCommandBuilder {
       case "aderyn":
         return buildAderynCommand();
       case "foundry":
-        throw new Error("Foundry execution is not supported by this scan execution service");
+        return buildFoundryCommand();
     }
   }
 }
@@ -95,5 +95,20 @@ function buildSemgrepCommand(): ScannerCommandPlan {
     ],
     outputFileName: "semgrep.json",
     expectsJsonOnStdout: false
+  };
+}
+
+
+function buildFoundryCommand(): ScannerCommandPlan {
+  return {
+    executable: "forge",
+    args: [
+      "test",
+      "--json",
+      "--root",
+      env.SCANNER_WORKSPACE_MOUNT_PATH
+    ],
+    outputFileName: "foundry.json",
+    expectsJsonOnStdout: true
   };
 }

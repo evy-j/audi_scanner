@@ -68,7 +68,8 @@
     "build:render:all": "node scripts/render-build-all.mjs",
     "start:render:all": "node scripts/render-start-all.mjs",
     "start:render:api-only": "npm run start:api",
-    "check:redis-url": "node scripts/check-redis-url.mjs"
+    "check:redis-url": "node scripts/check-redis-url.mjs",
+    "qa:simple-scan": "node scripts/qa-simple-scan-check.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",

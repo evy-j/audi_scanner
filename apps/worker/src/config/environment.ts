@@ -164,6 +164,7 @@ const envSchema = z
     ADERYN_CPU_LIMIT: z.coerce.number().positive().default(2),
     ADERYN_MEMORY_MB: positiveInt(4096),
     ADERYN_SCANNER_IMAGE: z.string().default("audit-scanner/scanner-aderyn:latest"),
+    FOUNDRY_SCANNER_IMAGE: z.string().default("audit-scanner/scanner-foundry:latest"),
     SEMGREP_RULESET: z.string().default("auto"),
     SEMGREP_JOBS: positiveInt(2),
     MYTHRIL_MAX_DEPTH: positiveInt(64),

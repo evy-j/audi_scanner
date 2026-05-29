@@ -1,4 +1,4 @@
-export type AnalyzerName = "slither" | "mythril" | "semgrep" | "aderyn";
+export type AnalyzerName = "slither" | "mythril" | "semgrep" | "aderyn" | "foundry";
 
 export type NormalizedSeverity = "INFORMATIONAL" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 

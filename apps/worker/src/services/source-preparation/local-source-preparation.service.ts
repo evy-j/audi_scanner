@@ -154,10 +154,44 @@ async function assertPreparedWorkspaceHasSupportedInput(
     return;
   }
 
-  const solidityFiles = await collectSolidityFiles(preparedPath);
-  if (solidityFiles.length === 0) {
-    throw new Error("Prepared SOURCE artifact must contain at least one .sol file");
+  const supportedFiles = await collectSupportedSourceFiles(preparedPath, 1);
+  if (supportedFiles.length === 0) {
+    throw new Error(
+      "Prepared SOURCE artifact must contain at least one supported source file (.sol, .vy, .js, .ts, .tsx, .jsx, .py, .go, .rs, .java, .cs, .php, .rb, .yml, .yaml, .json, .toml, .lock)."
+    );
   }
+}
+
+async function collectSupportedSourceFiles(root: string, limit = 5000): Promise<string[]> {
+  const files: string[] = [];
+  const supportedExtensions = new Set([
+    ".sol", ".vy", ".yul", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+    ".py", ".go", ".rs", ".java", ".cs", ".php", ".rb", ".json", ".yml", ".yaml",
+    ".toml", ".lock", ".md", ".env.example"
+  ]);
+  const supportedNames = new Set(["package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "foundry.toml", "hardhat.config.ts", "hardhat.config.js"]);
+
+  async function walk(current: string): Promise<void> {
+    if (files.length >= limit) return;
+    const entries = await fs.readdir(current, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (files.length >= limit) return;
+      const entryPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        if (!IGNORED_DIRECTORIES.has(entry.name)) await walk(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const ext = path.extname(entry.name).toLowerCase();
+      if (supportedExtensions.has(ext) || supportedNames.has(entry.name)) {
+        files.push(entryPath);
+      }
+    }
+  }
+
+  await walk(root);
+  return files.sort();
 }
 
 async function collectSolidityFiles(root: string): Promise<string[]> {

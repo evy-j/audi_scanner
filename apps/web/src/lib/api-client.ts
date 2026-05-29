@@ -81,8 +81,99 @@ export const defaultApiBaseUrl =
 export const defaultRealtimeWsUrl =
   process.env.NEXT_PUBLIC_REALTIME_WS_URL ?? "ws://localhost:4000/api/v1/realtime";
 
+export interface AuthSession {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+  user?: { id: string; email?: string; displayName?: string | null };
+}
+
+export interface SimpleWebsiteScanResponse {
+  status: "completed" | "failed";
+  targetUrl: string;
+  scannedAt: string;
+  summary: { score: number; passed: number; warnings: number; failed: number };
+  checks: Array<{ id: string; title: string; status: "pass" | "warn" | "fail" | "not_assessed"; evidence: string; remediation?: string }>;
+  response?: { status: number; finalUrl: string; headers: Record<string, string> };
+  tls?: { assessed: boolean; protocol?: string; validTo?: string; issuer?: string; subject?: string; error?: string };
+  realityNotes: string[];
+}
+
+export interface SimpleScanQueuedResponse {
+  status: "QUEUED" | "STORED" | "REJECTED" | "FAILED";
+  scan?: Scan;
+  sourceArtifact?: SourceArtifact;
+  artifact?: SourceArtifact;
+  manifest?: unknown;
+  runId?: string;
+  message?: string;
+  realityNotes?: string[];
+}
+
 export class AuditScannerApiClient {
   constructor(private readonly config: WorkspaceConfig) {}
+
+  login(input: { email: string; password: string }): Promise<AuthSession> {
+    return this.request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  }
+
+  signup(input: { email: string; password: string; displayName?: string }): Promise<{ userId: string; email: string; status: string; emailVerificationRequired: boolean }> {
+    return this.request("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  }
+
+  logout(refreshToken?: string): Promise<{ ok: true }> {
+    return this.request("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({ ...(refreshToken ? { refreshToken } : {}) })
+    });
+  }
+
+  getMe(): Promise<{ id: string; email: string; displayName?: string | null; status: string }> {
+    return this.request("/auth/me");
+  }
+
+  startSimpleSourceUploadScan(input: {
+    title: string;
+    projectId?: string;
+    analyzers: Array<"slither" | "mythril" | "semgrep" | "aderyn" | "foundry">;
+    files: Array<{ path: string; contentBase64: string; checksum?: string }>;
+    repoFullName?: string;
+    branch?: string;
+    commitSha?: string;
+    sourceLabel?: string;
+  }): Promise<SimpleScanQueuedResponse> {
+    return this.request("/simple-scans/source-upload", {
+      method: "POST",
+      body: JSON.stringify({ organizationId: this.config.organizationId, priority: "NORMAL", ...input })
+    });
+  }
+
+  startSimplePublicRepositoryScan(input: {
+    title: string;
+    repositoryUrl: string;
+    branch?: string;
+    projectId?: string;
+    analyzers: Array<"slither" | "mythril" | "semgrep" | "aderyn" | "foundry">;
+  }): Promise<SimpleScanQueuedResponse> {
+    return this.request("/simple-scans/public-repository", {
+      method: "POST",
+      body: JSON.stringify({ organizationId: this.config.organizationId, priority: "NORMAL", ...input })
+    });
+  }
+
+  passiveWebsiteScan(input: { url: string }): Promise<SimpleWebsiteScanResponse> {
+    return this.request("/simple-scans/website-passive", {
+      method: "POST",
+      body: JSON.stringify({ organizationId: this.config.organizationId, ...input })
+    });
+  }
 
   listScans(limit = 20): Promise<Scan[]> {
     return this.request(`/scans?organizationId=${this.config.organizationId}&limit=${limit}`);

@@ -20,6 +20,7 @@ import { sourceIngestionRoutes } from "../../modules/source-ingestion/source-ing
 import { billingRoutes, billingWebhookRoutes } from "../../modules/billing/billing.routes.js";
 import { securityOsRoutes } from "../../modules/security-os/security-os.routes.js";
 import { chainsRoutes } from "../../modules/chains/chains.routes.js";
+import { simpleScanRoutes } from "../../modules/simple-scans/simple-scans.routes.js";
 
 export const v1Router = Router();
 
@@ -42,6 +43,7 @@ v1Router.use(threatKnowledgeRoutes);
 v1Router.use(enterpriseRoutes);
 v1Router.use(githubIntegrationRoutes);
 v1Router.use(sourceIngestionRoutes);
+v1Router.use(simpleScanRoutes);
 v1Router.use(billingRoutes);
 v1Router.use(securityOsRoutes);
 v1Router.use(chainsRoutes);

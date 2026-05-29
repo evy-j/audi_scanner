@@ -28,40 +28,6 @@ export function createAnalyzerProcessor(
       }
     });
 
-    if (job.data.analyzer === "foundry") {
-      const message = "Foundry tests are executed by the P3 build/test runner and are persisted as test runs";
-      await dependencies.persistence.finalizeAnalyzerRun({
-        analyzerRunId: analyzerRun.id,
-        status: "NOT_ASSESSED",
-        startedAt: analyzerRun.startedAt,
-        error: message,
-        metadata: {
-          preparedArtifactKey: job.data.preparedArtifactKey,
-          reason: message
-        }
-      });
-      await dependencies.persistence.recordToolAvailability({
-        scanId: job.data.scanId,
-        organizationId: job.data.organizationId,
-        toolName: "foundry",
-        available: false,
-        status: "NOT_ASSESSED",
-        errorCategory: "NOT_ASSESSED",
-        error: message
-      });
-      const completion = await dependencies.stageCoordinator.recordAnalyzerFailure(
-        job.data.scanId,
-        job.data.analyzer,
-        message
-      );
-      await enqueueNextStageIfReady(dependencies, job.data, job.id, completion, progress, job);
-      return {
-        analyzer: job.data.analyzer,
-        status: "NOT_ASSESSED",
-        assessed: false
-      };
-    }
-
     try {
       const result = await dependencies.scannerExecution.execute(job.data, signal);
       await dependencies.persistence.finalizeAnalyzerRun({

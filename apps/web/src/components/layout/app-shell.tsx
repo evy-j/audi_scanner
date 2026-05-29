@@ -11,10 +11,13 @@ import {
   FileText,
   Github,
   Globe2,
+  LogIn,
+  LogOut,
   KeyRound,
   LockKeyhole,
   Radar,
   SearchCode,
+  UserCheck,
   ShieldCheck
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -28,12 +31,15 @@ const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/scan", label: "Scan", icon: SearchCode },
   { href: "/reports/latest", label: "Reports", icon: FileText },
+  { href: "/auditor", label: "Auditor", icon: UserCheck },
   { href: "/settings/organization", label: "Organization", icon: Building2 },
   { href: "/settings/security", label: "Security", icon: LockKeyhole },
   { href: "/settings/billing", label: "Billing", icon: CreditCard },
   { href: "/settings/integrations", label: "Integrations", icon: Github },
   { href: "/settings/chains", label: "Chains", icon: Globe2 },
-  { href: "/settings/api-keys", label: "API Keys", icon: KeyRound }
+  { href: "/settings/api-keys", label: "API Keys", icon: KeyRound },
+  { href: "/login", label: "Login", icon: LogIn },
+  { href: "/logout", label: "Logout", icon: LogOut }
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

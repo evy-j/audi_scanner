@@ -18,7 +18,7 @@ import { sanitizePathSegment } from "./safe-path.js";
 import type { StandardizedScannerJsonResult } from "./scanner-execution.types.js";
 import { extractAnalyzerVersion } from "./version-extractor.js";
 
-const SUPPORTED_ANALYZERS = new Set<AnalyzerName>(["slither", "mythril", "semgrep", "aderyn"]);
+const SUPPORTED_ANALYZERS = new Set<AnalyzerName>(["slither", "mythril", "semgrep", "aderyn", "foundry"]);
 
 export class ContainerizedScannerExecutionService implements ScannerExecutionService {
   constructor(

@@ -84,7 +84,7 @@ function getAnalyzerFromArtifactKey(artifactKey: string): AnalyzerName | null {
   const match = normalized.match(/scanner-runs\/[^/]+\/([^/]+)\//);
   const candidate = match?.[1];
 
-  if (candidate === "slither" || candidate === "mythril" || candidate === "semgrep" || candidate === "aderyn") {
+  if (candidate === "slither" || candidate === "mythril" || candidate === "semgrep" || candidate === "aderyn" || candidate === "foundry") {
     return candidate;
   }
 
