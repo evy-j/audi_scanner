@@ -66,9 +66,9 @@ import type {
   UsageSummary,
   Vulnerability
 } from "@/types/api";
-import { ApiClientError, safeErrorMessage, type ApiErrorPayload } from "./error-messages";
 
-export type { Organization, Scan } from "@/types/api";
+export type { Organization, Scan, SourceArtifact, Vulnerability } from "@/types/api";
+import { ApiClientError, safeErrorMessage, type ApiErrorPayload } from "./error-messages";
 
 export interface WorkspaceConfig {
   apiBaseUrl: string;
@@ -77,11 +77,35 @@ export interface WorkspaceConfig {
   organizationId: string;
 }
 
-export const defaultApiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
+export const defaultApiBaseUrl = normalizeApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend"
+);
 
 export const defaultRealtimeWsUrl =
-  process.env.NEXT_PUBLIC_REALTIME_WS_URL ?? "ws://localhost:4000/api/v1/realtime";
+  process.env.NEXT_PUBLIC_REALTIME_WS_URL ?? "wss://audit-scanner-api.onrender.com/api/v1/realtime";
+
+export function normalizeApiBaseUrl(value: string): string {
+  const raw = value.trim();
+  if (!raw) return "/api/backend";
+
+  const withoutTrailingSlash = raw.replace(/\/+$/u, "");
+  if (withoutTrailingSlash.startsWith("/")) {
+    return withoutTrailingSlash;
+  }
+
+  try {
+    const parsed = new URL(withoutTrailingSlash);
+    const pathname = parsed.pathname.replace(/\/+$/u, "");
+    if (pathname === "/api/v1" || pathname.endsWith("/api/v1")) {
+      parsed.pathname = pathname;
+      return parsed.toString().replace(/\/+$/u, "");
+    }
+    parsed.pathname = `${pathname === "/" ? "" : pathname}/api/v1`;
+    return parsed.toString().replace(/\/+$/u, "");
+  } catch {
+    return withoutTrailingSlash;
+  }
+}
 
 export interface AuthSession {
   accessToken: string;
@@ -771,11 +795,23 @@ export class AuditScannerApiClient {
         : `Bearer ${this.config.accessToken}`;
     }
 
-    const response = await fetch(`${this.config.apiBaseUrl}${path}`, {
-      ...init,
-      headers,
-      cache: "no-store"
-    });
+    const apiBaseUrl = normalizeApiBaseUrl(this.config.apiBaseUrl || defaultApiBaseUrl);
+    const url = `${apiBaseUrl}${path}`;
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...init,
+        headers,
+        cache: "no-store"
+      });
+    } catch {
+      throw new ApiClientError(
+        "NETWORK_ERROR",
+        `Could not reach the API at ${url}. Check the Vercel API URL or use the built-in /api/backend proxy.`,
+        0
+      );
+    }
 
     if (!response.ok) {
       let message = `Request failed with status ${response.status}`;
