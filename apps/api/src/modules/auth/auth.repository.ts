@@ -24,7 +24,8 @@ export class AuthRepository {
         email: input.email.toLowerCase(),
         passwordHash: input.passwordHash,
         displayName: input.displayName ?? null,
-        status: "PENDING"
+        status: "ACTIVE",
+        emailVerifiedAt: new Date()
       }
     });
   }

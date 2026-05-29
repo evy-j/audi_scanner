@@ -1,40 +1,30 @@
 "use client";
 
 import * as React from "react";
-import {
-  defaultApiBaseUrl,
-  defaultRealtimeWsUrl,
-  type WorkspaceConfig
-} from "@/lib/api-client";
-
-const storageKey = "audit-scanner.workspace";
+import type { WorkspaceConfig } from "@/lib/api-client";
+import { readWorkspaceConfig, saveWorkspaceConfig } from "@/lib/workspace-session";
 
 export function useWorkspaceConfig() {
-  const [config, setConfig] = React.useState<WorkspaceConfig>({
-    apiBaseUrl: defaultApiBaseUrl,
-    realtimeWsUrl: defaultRealtimeWsUrl,
-    accessToken: "",
-    organizationId: ""
-  });
+  const [config, setConfig] = React.useState<WorkspaceConfig>(() => readWorkspaceConfig());
   const [ready, setReady] = React.useState(false);
 
   React.useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
-    if (saved) {
-      try {
-        setConfig({ ...config, ...(JSON.parse(saved) as Partial<WorkspaceConfig>) });
-      } catch {
-        window.localStorage.removeItem(storageKey);
-      }
-    }
+    setConfig(readWorkspaceConfig());
     setReady(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    const sync = () => setConfig(readWorkspaceConfig());
+    window.addEventListener("storage", sync);
+    window.addEventListener("audit-scanner:workspace-updated", sync as EventListener);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("audit-scanner:workspace-updated", sync as EventListener);
+    };
   }, []);
 
   const updateConfig = React.useCallback((next: Partial<WorkspaceConfig>) => {
     setConfig((current) => {
       const updated = { ...current, ...next };
-      window.localStorage.setItem(storageKey, JSON.stringify(updated));
+      saveWorkspaceConfig(updated);
       return updated;
     });
   }, []);

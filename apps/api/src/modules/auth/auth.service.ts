@@ -43,7 +43,7 @@ export class AuthService {
       userId: user.id,
       email: user.email,
       status: user.status,
-      emailVerificationRequired: true
+      emailVerificationRequired: false
     };
   }
 

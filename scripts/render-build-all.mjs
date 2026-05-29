@@ -1,86 +1,75 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 
 const steps = [
-  ["db:generate", "npm", ["run", "db:generate"]],
-  ["build:packages", "npm", ["run", "build:packages"]],
-  ["build:api", "npm", ["--workspace", "@audit-scanner/api", "run", "build"]],
-  ["build:worker", "npm", ["--workspace", "@audit-scanner/worker", "run", "build"]],
+  ["db:generate", ["run", "db:generate"]],
+  ["build:packages", ["run", "build:packages"]],
+  ["build:api", ["--workspace", "@audit-scanner/api", "run", "build"]],
+  ["build:worker", ["--workspace", "@audit-scanner/worker", "run", "build"]],
 ];
 
-const stepTimeoutMs = Number(process.env.RENDER_BUILD_STEP_TIMEOUT_MS || 240_000);
-const heartbeatMs = Number(process.env.RENDER_BUILD_HEARTBEAT_MS || 15_000);
-
-function now() {
+function stamp() {
   return new Date().toISOString();
 }
 
-function runStep([name, command, args]) {
-  return new Promise((resolve, reject) => {
-    console.log(`[render:build] ${now()} starting ${name}: ${command} ${args.join(" ")}`);
-    const started = Date.now();
-    let lastOutput = Date.now();
-    let finished = false;
+function npmInvocation(args) {
+  const npmExecPath = process.env.npm_execpath;
 
-    const child = spawn(command, args, {
-      stdio: ["ignore", "pipe", "pipe"],
+  // Most reliable path when this script is launched through npm run.
+  if (npmExecPath && existsSync(npmExecPath)) {
+    return {
+      command: process.execPath,
+      args: [npmExecPath, ...args],
       shell: false,
-      env: {
-        ...process.env,
-        CI: "true",
-        TSC_NONPOLLING_WATCHER: "1",
-        TSC_WATCHFILE: "UseFsEvents",
-        TSC_WATCHDIRECTORY: "UseFsEvents",
-      },
+      printable: `node ${npmExecPath} ${args.join(" ")}`,
+    };
+  }
+
+  const command = process.platform === "win32" ? "npm.cmd" : "npm";
+  return {
+    command,
+    args,
+    shell: process.platform === "win32",
+    printable: `${command} ${args.join(" ")}`,
+  };
+}
+
+function runStep(name, args) {
+  return new Promise((resolve, reject) => {
+    const invocation = npmInvocation(args);
+    console.log(`[render:build] ${stamp()} starting ${name}: ${invocation.printable}`);
+
+    const child = spawn(invocation.command, invocation.args, {
+      cwd: process.cwd(),
+      stdio: "inherit",
+      env: process.env,
+      shell: invocation.shell,
+      windowsHide: true,
     });
 
     const heartbeat = setInterval(() => {
-      const elapsed = Math.round((Date.now() - started) / 1000);
-      const quiet = Math.round((Date.now() - lastOutput) / 1000);
-      console.log(`[render:build] ${now()} ${name} still running (${elapsed}s elapsed, ${quiet}s quiet)`);
-    }, heartbeatMs);
-
-    const timeout = setTimeout(() => {
-      if (finished) return;
-      console.error(`[render:build] ${now()} ${name} timed out after ${Math.round(stepTimeoutMs / 1000)}s`);
-      console.error(`[render:build] ${name} last output was ${Math.round((Date.now() - lastOutput) / 1000)}s ago`);
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), 10_000).unref();
-    }, stepTimeoutMs);
-
-    child.stdout.on("data", (chunk) => {
-      lastOutput = Date.now();
-      process.stdout.write(chunk);
-    });
-
-    child.stderr.on("data", (chunk) => {
-      lastOutput = Date.now();
-      process.stderr.write(chunk);
-    });
+      console.log(`[render:build] ${stamp()} ${name} still running...`);
+    }, 30000);
 
     child.on("error", (error) => {
-      finished = true;
       clearInterval(heartbeat);
-      clearTimeout(timeout);
       reject(error);
     });
 
-    child.on("close", (code, signal) => {
-      finished = true;
+    child.on("exit", (code, signal) => {
       clearInterval(heartbeat);
-      clearTimeout(timeout);
-      const elapsed = Math.round((Date.now() - started) / 1000);
       if (code === 0) {
-        console.log(`[render:build] ${now()} completed ${name} in ${elapsed}s`);
+        console.log(`[render:build] ${stamp()} completed ${name}`);
         resolve();
         return;
       }
-      reject(new Error(`${name} failed with code ${code ?? "null"} signal ${signal ?? "null"}`));
+      reject(new Error(`${name} failed with code=${code ?? "none"} signal=${signal ?? "none"}`));
     });
   });
 }
 
-for (const step of steps) {
-  await runStep(step);
+for (const [name, args] of steps) {
+  await runStep(name, args);
 }
 
-console.log(`[render:build] ${now()} all build steps completed`);
+console.log(`[render:build] ${stamp()} all build steps completed`);

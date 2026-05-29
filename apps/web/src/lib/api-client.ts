@@ -68,6 +68,8 @@ import type {
 } from "@/types/api";
 import { ApiClientError, safeErrorMessage, type ApiErrorPayload } from "./error-messages";
 
+export type { Organization, Scan } from "@/types/api";
+
 export interface WorkspaceConfig {
   apiBaseUrl: string;
   realtimeWsUrl: string;
@@ -137,6 +139,17 @@ export class AuditScannerApiClient {
 
   getMe(): Promise<{ id: string; email: string; displayName?: string | null; status: string }> {
     return this.request("/auth/me");
+  }
+
+  listOrganizations(): Promise<Organization[]> {
+    return this.request("/organizations");
+  }
+
+  createOrganization(input: { name: string; slug: string; billingEmail?: string }): Promise<Organization> {
+    return this.request("/organizations", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   }
 
   startSimpleSourceUploadScan(input: {
@@ -747,13 +760,20 @@ export class AuditScannerApiClient {
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      ...(init.headers as Record<string, string> | undefined)
+    };
+
+    if (this.config.accessToken) {
+      headers.authorization = this.config.accessToken.toLowerCase().startsWith("bearer ")
+        ? this.config.accessToken
+        : `Bearer ${this.config.accessToken}`;
+    }
+
     const response = await fetch(`${this.config.apiBaseUrl}${path}`, {
       ...init,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${this.config.accessToken}`,
-        ...init.headers
-      },
+      headers,
       cache: "no-store"
     });
 

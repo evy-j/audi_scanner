@@ -11,8 +11,7 @@ import {
   FileText,
   Github,
   Globe2,
-  LogIn,
-  LogOut,
+  UserCircle2,
   KeyRound,
   LockKeyhole,
   Radar,
@@ -38,8 +37,7 @@ const navigation = [
   { href: "/settings/integrations", label: "Integrations", icon: Github },
   { href: "/settings/chains", label: "Chains", icon: Globe2 },
   { href: "/settings/api-keys", label: "API Keys", icon: KeyRound },
-  { href: "/login", label: "Login", icon: LogIn },
-  { href: "/logout", label: "Logout", icon: LogOut }
+  { href: "/profile", label: "Profile", icon: UserCircle2 }
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -126,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <div className="hidden items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/8 px-3 py-2 text-xs text-emerald-100 md:flex">
                 <Activity className="h-3.5 w-3.5" />
-                {connected ? "API linked" : "API pending"}
+                {connected ? "Workspace linked" : "Login needed"}
               </div>
               <WorkspaceConfigPanel />
             </div>
