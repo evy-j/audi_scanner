@@ -2,6 +2,7 @@ import {
   AuditScannerApiClient,
   defaultApiBaseUrl,
   defaultRealtimeWsUrl,
+  normalizeWorkspaceConfig,
   type AuthSession,
   type WorkspaceConfig
 } from "@/lib/api-client";
@@ -32,22 +33,29 @@ export function readWorkspaceConfig(): WorkspaceConfig {
     organizationId: ""
   };
 
-  if (typeof window === "undefined") return fallback;
+  const normalizedFallback = normalizeWorkspaceConfig(fallback);
+  if (typeof window === "undefined") return normalizedFallback;
   const saved = window.localStorage.getItem(workspaceStorageKey);
-  if (!saved) return fallback;
+  if (!saved) return normalizedFallback;
 
   try {
-    return { ...fallback, ...(JSON.parse(saved) as Partial<WorkspaceConfig>) };
+    const parsed = JSON.parse(saved) as Partial<WorkspaceConfig>;
+    const normalized = normalizeWorkspaceConfig({ ...normalizedFallback, ...parsed });
+    if (normalized.apiBaseUrl !== parsed.apiBaseUrl) {
+      window.localStorage.setItem(workspaceStorageKey, JSON.stringify(normalized));
+    }
+    return normalized;
   } catch {
     window.localStorage.removeItem(workspaceStorageKey);
-    return fallback;
+    return normalizedFallback;
   }
 }
 
 export function saveWorkspaceConfig(config: WorkspaceConfig) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(workspaceStorageKey, JSON.stringify(config));
-  window.dispatchEvent(new CustomEvent("audit-scanner:workspace-updated", { detail: config }));
+  const normalized = normalizeWorkspaceConfig(config);
+  window.localStorage.setItem(workspaceStorageKey, JSON.stringify(normalized));
+  window.dispatchEvent(new CustomEvent("audit-scanner:workspace-updated", { detail: normalized }));
 }
 
 export function readStoredUser(): StoredUserProfile | null {

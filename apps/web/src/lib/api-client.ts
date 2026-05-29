@@ -77,24 +77,56 @@ export interface WorkspaceConfig {
   organizationId: string;
 }
 
+export const builtinBackendProxyBaseUrl = "/api/backend";
+
 export const defaultApiBaseUrl = normalizeApiBaseUrl(
-  process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend"
+  process.env.NEXT_PUBLIC_API_BASE_URL || builtinBackendProxyBaseUrl
 );
 
 export const defaultRealtimeWsUrl =
   process.env.NEXT_PUBLIC_REALTIME_WS_URL ?? "wss://audit-scanner-api.onrender.com/api/v1/realtime";
 
+function isBrowserRuntime(): boolean {
+  return typeof window !== "undefined" && Boolean(window.location);
+}
+
+function isLocalFrontendHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "0.0.0.0" || hostname.endsWith(".local");
+}
+
+function shouldUseBuiltinProxyForBrowser(parsed: URL): boolean {
+  if (!isBrowserRuntime()) return false;
+
+  const frontendHost = window.location.hostname;
+  const backendHost = parsed.hostname;
+
+  if (!backendHost || backendHost === frontendHost) return false;
+
+  // The deployed browser app must call the same-origin Next.js proxy.
+  // This avoids CORS/preflight failures when a stale Vercel env or localStorage
+  // still contains the direct Render API URL.
+  if (backendHost === "audit-scanner-api.onrender.com" || backendHost.endsWith(".onrender.com")) {
+    return true;
+  }
+
+  return !isLocalFrontendHost(frontendHost);
+}
+
 export function normalizeApiBaseUrl(value: string): string {
   const raw = value.trim();
-  if (!raw) return "/api/backend";
+  if (!raw) return builtinBackendProxyBaseUrl;
 
   const withoutTrailingSlash = raw.replace(/\/+$/u, "");
   if (withoutTrailingSlash.startsWith("/")) {
-    return withoutTrailingSlash;
+    return withoutTrailingSlash || builtinBackendProxyBaseUrl;
   }
 
   try {
     const parsed = new URL(withoutTrailingSlash);
+    if (shouldUseBuiltinProxyForBrowser(parsed)) {
+      return builtinBackendProxyBaseUrl;
+    }
+
     const pathname = parsed.pathname.replace(/\/+$/u, "");
     if (pathname === "/api/v1" || pathname.endsWith("/api/v1")) {
       parsed.pathname = pathname;
@@ -105,6 +137,16 @@ export function normalizeApiBaseUrl(value: string): string {
   } catch {
     return withoutTrailingSlash;
   }
+}
+
+export function normalizeWorkspaceConfig(config: WorkspaceConfig): WorkspaceConfig {
+  return {
+    ...config,
+    apiBaseUrl: normalizeApiBaseUrl(config.apiBaseUrl || defaultApiBaseUrl),
+    realtimeWsUrl: config.realtimeWsUrl || defaultRealtimeWsUrl,
+    accessToken: config.accessToken || "",
+    organizationId: config.organizationId || ""
+  };
 }
 
 export interface AuthSession {
